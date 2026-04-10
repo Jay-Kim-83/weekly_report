@@ -97,6 +97,7 @@
             <div id="modalPreview"></div>
         </div>
         <div class="modal-footer">
+            <button class="btn-copy" onclick="copyModalHtml()">📋 HTML 복사</button>
             <button class="btn-cancel" onclick="closeModal()">취소</button>
             <button class="btn-confirm" onclick="applyLoadedFile()">적용</button>
         </div>
@@ -443,6 +444,26 @@ function applyLoadedFile() {
     handleInput();
     closeModal();
     showToast('파일을 적용했습니다.', 'success');
+}
+
+function copyModalHtml() {
+    if (!pendingLoadData) return;
+    const html = buildHtml(
+        parseSection(pendingLoadData.weekly || '', true),
+        parseSection(pendingLoadData.next || '', true),
+        parseSection(pendingLoadData.etc || '', true)
+    );
+    navigator.clipboard.writeText(html).then(() => {
+        showToast("HTML 코드가 복사되었습니다!", 'success');
+    }).catch(() => {
+        const tmp = document.createElement('textarea');
+        tmp.value = html;
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+        showToast("HTML 코드가 복사되었습니다!", 'success');
+    });
 }
 
 function closeModal() {
