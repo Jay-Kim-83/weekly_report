@@ -19,8 +19,24 @@ app.post('/api/save', (req, res) => {
     const fullPath = path.join(SAVE_PATH, fileName);
     fs.writeFile(fullPath, JSON.stringify(data, null, 2), (err) => {
         if (err) return res.status(500).json({ success: false });
-        res.json({ success: true, path: fullPath });
+        res.json({ success: true, message: `저장 완료: ${fileName}` });
     });
+});
+
+// 저장된 파일 목록
+app.get('/api/reports', (req, res) => {
+    fs.readdir(SAVE_PATH, (err, files) => {
+        if (err) return res.status(500).json({ success: false });
+        const jsonFiles = files.filter(f => f.endsWith('.json'));
+        res.json({ success: true, files: jsonFiles });
+    });
+});
+
+// 파일 다운로드
+app.get('/api/reports/:fileName', (req, res) => {
+    const filePath = path.join(SAVE_PATH, req.params.fileName);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ success: false, message: '파일 없음' });
+    res.sendFile(filePath);
 });
 
 app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
