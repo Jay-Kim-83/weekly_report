@@ -287,7 +287,10 @@ function escapeHtml(str) {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function parseSection(text) {
+function parseSection(text, doubleEscape) {
+    const esc = doubleEscape
+        ? (s) => escapeHtml(escapeHtml(s))
+        : escapeHtml;
     let html = '';
     const projects = text.split(/\n(?=\d\.)/);
 
@@ -295,7 +298,7 @@ function parseSection(text) {
         if(!p.trim()) return;
         const lines = p.trim().split('\n');
 
-        let title = escapeHtml(lines[0].trim());
+        let title = esc(lines[0].trim());
         let tech = '';
         let startIdx = 1;
 
@@ -313,7 +316,7 @@ function parseSection(text) {
 
         let list = '';
         for(let i=startIdx; i<lines.length; i++) {
-            let ln = escapeHtml(lines[i].trim());
+            let ln = esc(lines[i].trim());
             if(!ln || ["-", "*", "+"].includes(ln)) continue;
 
             ln = ln.replace(/\[(.*?)\]/g, '<span style="color:#d35400;font-weight:bold;">[$1]</span>');
@@ -338,24 +341,31 @@ function parseSection(text) {
     return html;
 }
 
-function generateHTML() {
-    const weeklyText = document.getElementById('inputWeekly').value;
-    const nextText = document.getElementById('inputNext').value;
-    const etcText = document.getElementById('inputETC').value;
-
-    const weeklyHtml = parseSection(weeklyText);
-    const nextHtml = parseSection(nextText);
-    const etcHtml = parseSection(etcText);
-
-    const final = `<div style="font-family:'Noto Sans KR','Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Segoe UI',sans-serif;letter-spacing:-0.02em;line-height:1.6;color:#333;max-width:800px;margin:0 auto;border:1px dotted #ccc;padding:25px;background:#fff;text-align:left;">
+function buildHtml(weeklyHtml, nextHtml, etcHtml) {
+    return `<div style="font-family:'Noto Sans KR','Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Segoe UI',sans-serif;letter-spacing:-0.02em;line-height:1.6;color:#333;max-width:800px;margin:0 auto;border:1px dotted #ccc;padding:25px;background:#fff;text-align:left;">
     <h2 style="border-left:5px solid #2c3e50;padding-left:15px;color:#2c3e50;margin:0 0 25px 0;font-size:20px;">[금주 진행 업무]</h2>
     ${weeklyHtml}
     <h2 style="border-left:5px solid #bdc3c7;padding-left:15px;color:#2c3e50;margin:40px 0 15px 0;font-size:20px;">[차주 예정 업무]</h2>
     ${nextHtml}
     <div style="margin-top:30px;padding-top:15px;border-top:1px solid #eee;"><span style="font-size:13px;color:#999;font-weight:bold;">[기타 특이 사항]</span>${etcHtml}</div></div>`;
+}
 
-    document.getElementById('preview').innerHTML = final;
-    document.getElementById('outputCode').value = final;
+function generateHTML() {
+    const weeklyText = document.getElementById('inputWeekly').value;
+    const nextText = document.getElementById('inputNext').value;
+    const etcText = document.getElementById('inputETC').value;
+
+    // 프리뷰용 (1단 이스케이프 - 브라우저가 &lt;를 <로 표시)
+    const previewHtml = buildHtml(parseSection(weeklyText), parseSection(nextText), parseSection(etcText));
+    document.getElementById('preview').innerHTML = previewHtml;
+
+    // 복사용 (이중 이스케이프 - 에디터에서 렌더링해도 평문 유지)
+    const copyHtml = buildHtml(
+        parseSection(weeklyText, true),
+        parseSection(nextText, true),
+        parseSection(etcText, true)
+    );
+    document.getElementById('outputCode').value = copyHtml;
 }
 
 function getWeekOfMonth(date) {
