@@ -39,6 +39,16 @@
         .guide { background: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 0.8rem; color: #666; border-left: 4px solid var(--primary); line-height: 1.5; }
         .hl { color: #d35400; font-weight: bold; }
         #fileInput { display: none; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: #fff; border-radius: 12px; width: 90%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
+        .modal-header { padding: 16px 20px; border-bottom: 1px solid #e1e4e8; display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; font-size: 1.1rem; color: var(--primary); }
+        .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+        .modal-footer { padding: 12px 20px; border-top: 1px solid #e1e4e8; display: flex; justify-content: flex-end; gap: 8px; }
+        .modal-footer button { min-width: 80px; }
+        .btn-confirm { background-color: var(--primary); color: white; }
+        .btn-cancel { background-color: #95a5a6; color: white; }
     </style>
 </head>
 <body>
@@ -77,8 +87,57 @@
     <textarea id="outputCode" readonly></textarea>
 </div>
 <div id="toast" class="toast"></div>
+<div id="loadModal" class="modal-overlay">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="modalTitle">불러온 파일 미리보기</h3>
+            <button class="btn-cancel" onclick="closeModal()" style="min-width:auto;width:32px;height:32px;padding:0;font-size:16px;border-radius:50%;">X</button>
+        </div>
+        <div class="modal-body">
+            <div id="modalPreview"></div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            <button class="btn-confirm" onclick="applyLoadedFile()">적용</button>
+        </div>
+    </div>
+</div>
 
 <script>
+// Undo/Redo 시스템
+const history = {};
+const redoStack = {};
+const MAX_HISTORY = 100;
+
+function saveHistory(id) {
+    const val = document.getElementById(id).value;
+    if (!history[id]) history[id] = [];
+    if (!redoStack[id]) redoStack[id] = [];
+    // 이전 상태와 같으면 저장하지 않음
+    if (history[id].length > 0 && history[id][history[id].length - 1] === val) return;
+    history[id].push(val);
+    if (history[id].length > MAX_HISTORY) history[id].shift();
+    redoStack[id] = []; // 새 입력 시 redo 초기화
+}
+
+function undo(id) {
+    if (!history[id] || history[id].length <= 1) return;
+    const el = document.getElementById(id);
+    if (!redoStack[id]) redoStack[id] = [];
+    redoStack[id].push(history[id].pop());
+    el.value = history[id][history[id].length - 1];
+    handleInput(true);
+}
+
+function redo(id) {
+    if (!redoStack[id] || redoStack[id].length === 0) return;
+    const el = document.getElementById(id);
+    const val = redoStack[id].pop();
+    history[id].push(val);
+    el.value = val;
+    handleInput(true);
+}
+
 function showToast(msg, type = '') {
     const t = document.getElementById('toast');
     t.textContent = msg;
@@ -144,6 +203,21 @@ function handlePaste(e) {
 
 function handleKeyEvents(e) {
     const textarea = e.target;
+    const id = textarea.id;
+
+    // Ctrl+Z: Undo
+    if (e.ctrlKey && e.key === 'z') {
+        e.preventDefault();
+        undo(id);
+        return;
+    }
+    // Ctrl+Y: Redo
+    if (e.ctrlKey && e.key === 'y') {
+        e.preventDefault();
+        redo(id);
+        return;
+    }
+
     const start = textarea.selectionStart;
     const value = textarea.value;
     const lines = value.substr(0, start).split('\n');
@@ -190,8 +264,13 @@ function getNextProjectNumber(text) {
     return matches ? Math.max(...matches.map(Number)) + 1 : 1;
 }
 
-function handleInput() {
+function handleInput(skipHistory) {
     generateHTML();
+    if (!skipHistory) {
+        saveHistory('inputWeekly');
+        saveHistory('inputNext');
+        saveHistory('inputETC');
+    }
     localStorage.setItem('work_report_v8', JSON.stringify({
         weekly: document.getElementById('inputWeekly').value,
         next: document.getElementById('inputNext').value,
@@ -311,16 +390,46 @@ function saveToFile() {
     .catch(err => showToast('서버 연결 오류', 'error'));
 }
 
+let pendingLoadData = null;
+
 function loadFromFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        const data = JSON.parse(e.target.result);
-        document.getElementById('inputWeekly').value = data.weekly;
-        document.getElementById('inputNext').value = data.next;
-        document.getElementById('inputETC').value = data.etc;
-        handleInput();
+        pendingLoadData = JSON.parse(e.target.result);
+        // 모달에 미리보기 렌더링
+        const weeklyHtml = parseSection(pendingLoadData.weekly || '');
+        const nextHtml = parseSection(pendingLoadData.next || '');
+        const etcHtml = parseSection(pendingLoadData.etc || '');
+        document.getElementById('modalTitle').textContent = `불러온 파일: ${file.name}`;
+        document.getElementById('modalPreview').innerHTML = `
+            <div style="line-height:1.6;color:#333;border:1px dotted #ccc;padding:20px;background:#fff;">
+                <h2 style="border-left:5px solid #2c3e50;padding-left:15px;color:#2c3e50;margin:0 0 20px 0;font-size:18px;">[금주 진행 업무]</h2>
+                ${weeklyHtml}
+                <h2 style="border-left:5px solid #bdc3c7;padding-left:15px;color:#2c3e50;margin:30px 0 15px 0;font-size:18px;">[차주 예정 업무]</h2>
+                ${nextHtml}
+                <div style="margin-top:20px;padding-top:15px;border-top:1px solid #eee;"><span style="font-size:13px;color:#999;font-weight:bold;">[기타 특이 사항]</span>${etcHtml}</div>
+            </div>`;
+        document.getElementById('loadModal').classList.add('show');
     };
-    reader.readAsText(event.target.files[0]);
+    reader.readAsText(file);
+    event.target.value = ''; // 같은 파일 재선택 가능
+}
+
+function applyLoadedFile() {
+    if (!pendingLoadData) return;
+    document.getElementById('inputWeekly').value = pendingLoadData.weekly || '';
+    document.getElementById('inputNext').value = pendingLoadData.next || '';
+    document.getElementById('inputETC').value = pendingLoadData.etc || '';
+    handleInput();
+    closeModal();
+    showToast('파일을 적용했습니다.', 'success');
+}
+
+function closeModal() {
+    document.getElementById('loadModal').classList.remove('show');
+    pendingLoadData = null;
 }
 
 function resetAll() { if(confirm("초기화하시겠습니까?")) { localStorage.removeItem('work_report_v8'); location.reload(); } }
@@ -349,6 +458,10 @@ window.onload = () => {
         document.getElementById('inputETC').value = d.etc;
     }
     generateHTML();
+    // 초기 상태 히스토리 저장
+    saveHistory('inputWeekly');
+    saveHistory('inputNext');
+    saveHistory('inputETC');
 };
 </script>
 
