@@ -296,7 +296,16 @@ function saveToFile() {
     })
     .then(res => res.json())
     .then(res => {
-        if(res.success) showToast(res.message, 'success');
+        if(res.success) {
+            showToast(res.message, 'success');
+            // 로컬 자동 다운로드
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        }
         else showToast('저장 실패', 'error');
     })
     .catch(err => showToast('서버 연결 오류', 'error'));
