@@ -39,6 +39,9 @@
         .guide { background: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 0.8rem; color: #666; border-left: 4px solid var(--primary); line-height: 1.5; }
         .hl { color: #d35400; font-weight: bold; }
         #fileInput { display: none; }
+        .period-select { display: flex; gap: 8px; }
+        .period-select select { flex: 1; padding: 10px 12px; border: 1px solid #d1d5da; border-radius: 6px; background: #fff; font-family: inherit; font-size: 0.9rem; outline: none; cursor: pointer; transition: 0.2s; }
+        .period-select select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(44, 62, 80, 0.1); }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal-overlay.show { display: flex; }
         .modal { background: #fff; border-radius: 12px; width: 90%; max-width: 800px; max-height: 85vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px rgba(0,0,0,0.2); }
@@ -62,6 +65,13 @@
 
     <div class="flex-container">
         <div class="input-area">
+            <label>보고 기준</label>
+            <div class="period-select">
+                <select id="selectYear" onchange="handleInput()"></select>
+                <select id="selectMonth" onchange="handleInput()"></select>
+                <select id="selectWeek" onchange="handleInput()"></select>
+            </div>
+
             <label>금주 업무 내용</label>
             <textarea id="inputWeekly" onkeydown="handleKeyEvents(event)" onpaste="handlePaste(event)" oninput="handleInput()" placeholder="업무 내용을 여기에 붙여넣으세요..."></textarea>
 
@@ -374,39 +384,58 @@ function getWeekOfMonth(date) {
     return Math.ceil((date.getDate() + firstDay) / 7);
 }
 
-function saveToFile() {
+function initPeriodSelects() {
     const now = new Date();
-    const month = now.getMonth() + 1;
-    const week = getWeekOfMonth(now);
-    const fileName = `업무보고_${month}월 ${week}주차.json`;
+    const curYear = now.getFullYear();
+    const curMonth = now.getMonth() + 1;
+    const curWeek = getWeekOfMonth(now);
+
+    const ySel = document.getElementById('selectYear');
+    const mSel = document.getElementById('selectMonth');
+    const wSel = document.getElementById('selectWeek');
+
+    for (let y = curYear - 2; y <= curYear + 1; y++) {
+        ySel.insertAdjacentHTML('beforeend', `<option value="${y}">${y}년</option>`);
+    }
+    for (let m = 1; m <= 12; m++) {
+        mSel.insertAdjacentHTML('beforeend', `<option value="${m}">${m}월</option>`);
+    }
+    for (let w = 1; w <= 6; w++) {
+        wSel.insertAdjacentHTML('beforeend', `<option value="${w}">${w}주차</option>`);
+    }
+    ySel.value = curYear;
+    mSel.value = curMonth;
+    wSel.value = curWeek;
+}
+
+function getPeriod() {
+    return {
+        year: parseInt(document.getElementById('selectYear').value, 10),
+        month: parseInt(document.getElementById('selectMonth').value, 10),
+        week: parseInt(document.getElementById('selectWeek').value, 10)
+    };
+}
+
+function saveToFile() {
+    const period = getPeriod();
+    const fileName = `업무보고_${period.year}년 ${period.month}월 ${period.week}주차.json`;
 
     const data = {
+        year: period.year,
+        month: period.month,
+        week: period.week,
         weekly: document.getElementById('inputWeekly').value,
         next: document.getElementById('inputNext').value,
         etc: document.getElementById('inputETC').value
     };
 
-    // Node.js 서버로 데이터 전송
-    fetch('/api/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileName, data })
-    })
-    .then(res => res.json())
-    .then(res => {
-        if(res.success) {
-            showToast(res.message, 'success');
-            // 로컬 자동 다운로드
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = fileName;
-            a.click();
-            URL.revokeObjectURL(a.href);
-        }
-        else showToast('저장 실패', 'error');
-    })
-    .catch(err => showToast('서버 연결 오류', 'error'));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast(`저장 완료: ${fileName}`, 'success');
 }
 
 let pendingLoadData = null;
@@ -438,6 +467,9 @@ function loadFromFile(event) {
 
 function applyLoadedFile() {
     if (!pendingLoadData) return;
+    if (pendingLoadData.year) document.getElementById('selectYear').value = pendingLoadData.year;
+    if (pendingLoadData.month) document.getElementById('selectMonth').value = pendingLoadData.month;
+    if (pendingLoadData.week) document.getElementById('selectWeek').value = pendingLoadData.week;
     document.getElementById('inputWeekly').value = pendingLoadData.weekly || '';
     document.getElementById('inputNext').value = pendingLoadData.next || '';
     document.getElementById('inputETC').value = pendingLoadData.etc || '';
@@ -489,6 +521,7 @@ function copyCode() {
 }
 
 window.onload = () => {
+    initPeriodSelects();
     const temp = localStorage.getItem('work_report_v8');
     if (temp) {
         const d = JSON.parse(temp);
