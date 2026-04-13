@@ -512,7 +512,6 @@ function saveToFile() {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(a.href);
-    showToast(`저장 완료: ${fileName}`, 'success');
 }
 
 let pendingLoadData = null;
