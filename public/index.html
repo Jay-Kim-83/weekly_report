@@ -160,10 +160,87 @@ function showToast(msg, type = '') {
     t._timer = setTimeout(() => t.classList.remove('show'), 2500);
 }
 
+// HTML(리포트 출력 형식)을 불렛 텍스트로 역변환
+function htmlToBulletText(htmlStr) {
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = htmlStr;
+
+    const out = [];
+
+    // 프로젝트 블록: <div> > <div> (title) + <ul>
+    const blocks = wrapper.querySelectorAll(':scope > div > div, :scope > div');
+    // 일반화: 모든 직계 div 순회
+    const topDivs = wrapper.querySelectorAll('div');
+    const visited = new Set();
+
+    // 우선 섹션 구조가 아닌 단순 ul만 있는 경우 처리
+    function parseUl(ul, baseLines) {
+        ul.querySelectorAll(':scope > li').forEach(li => {
+            const styleType = (li.getAttribute('style') || '').match(/list-style-type:\s*([a-z]+)/);
+            const type = styleType ? styleType[1] : 'disc';
+            const text = li.textContent.trim();
+            if (!text) return;
+            if (type === 'square') baseLines.push('    + ' + text);
+            else if (type === 'circle') baseLines.push('  * ' + text);
+            else if (type === 'none') baseLines.push('[' + text.replace(/^\[|\]$/g, '') + ']');
+            else baseLines.push('- ' + text);
+        });
+    }
+
+    // 프로젝트 제목이 있는 블록 처리
+    wrapper.querySelectorAll('div > div > span:first-child').forEach(titleSpan => {
+        const style = titleSpan.getAttribute('style') || '';
+        if (!/font-size:\s*17px/.test(style)) return; // 제목 span만
+        const parentWrap = titleSpan.closest('div').parentElement; // outer project div
+        if (visited.has(parentWrap)) return;
+        visited.add(parentWrap);
+
+        let title = titleSpan.textContent.trim();
+        // (tech) span 재결합
+        const techSpan = titleSpan.nextElementSibling;
+        if (techSpan && /font-size:\s*12px/.test(techSpan.getAttribute('style') || '')) {
+            title += ' ' + techSpan.textContent.trim();
+        }
+        out.push(title);
+
+        const ul = parentWrap.querySelector(':scope > ul');
+        if (ul) parseUl(ul, out);
+    });
+
+    // 제목 없는 ul (차주/기타) 처리: 아직 visited 되지 않은 최상위 ul
+    wrapper.querySelectorAll('ul').forEach(ul => {
+        // 이미 프로젝트 내부에서 처리된 ul은 건너뜀
+        let parent = ul.parentElement;
+        let inProject = false;
+        while (parent && parent !== wrapper) {
+            if (visited.has(parent)) { inProject = true; break; }
+            parent = parent.parentElement;
+        }
+        if (inProject) return;
+        parseUl(ul, out);
+    });
+
+    return out.join('\n').trim();
+}
+
 function handlePaste(e) {
     e.preventDefault();
     const clipboardData = e.clipboardData || window.clipboardData;
     let pastedData = clipboardData.getData('Text');
+
+    // HTML 코드 감지 → 역변환
+    if (/<(div|ul|li|h2|span)[\s>]/i.test(pastedData)) {
+        const converted = htmlToBulletText(pastedData);
+        if (converted) {
+            const ta = e.target;
+            const s = ta.selectionStart, ed = ta.selectionEnd;
+            ta.value = ta.value.substring(0, s) + converted + ta.value.substring(ed);
+            ta.selectionStart = ta.selectionEnd = s + converted.length;
+            handleInput();
+            return;
+        }
+    }
+
     const lines = pastedData.split('\n');
 
     const processedLines = lines.map(line => {
