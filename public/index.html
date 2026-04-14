@@ -329,8 +329,7 @@ function handleKeyEvents(e) {
             else if (trimmed.startsWith('-')) ins = "\n- ";
             else if (trimmed.startsWith('*')) ins = "\n  * ";
             else if (trimmed.startsWith('+')) ins = "\n    + ";
-            textarea.value = value.substring(0, start) + ins + value.substring(textarea.selectionEnd);
-            textarea.selectionStart = textarea.selectionEnd = start + ins.length;
+            insertAtCursor(textarea, ins);
         }
         handleInput();
     }
@@ -346,10 +345,26 @@ function handleKeyEvents(e) {
     }
 }
 
+function insertAtCursor(textarea, text) {
+    textarea.focus();
+    // execCommand는 네이티브 입력처럼 동작하여 스크롤이 커서를 따라감
+    if (!document.execCommand('insertText', false, text)) {
+        // fallback
+        const s = textarea.selectionStart;
+        textarea.value = textarea.value.substring(0, s) + text + textarea.value.substring(textarea.selectionEnd);
+        textarea.selectionStart = textarea.selectionEnd = s + text.length;
+    }
+}
+
 function replaceCurrentLine(textarea, start, currentLine, newLine) {
     const lineStart = start - currentLine.length;
-    textarea.value = textarea.value.substring(0, lineStart) + newLine + textarea.value.substring(textarea.selectionEnd);
-    textarea.selectionStart = textarea.selectionEnd = lineStart + newLine.length;
+    const origEnd = textarea.selectionEnd;
+    textarea.focus();
+    textarea.setSelectionRange(lineStart, origEnd);
+    if (!document.execCommand('insertText', false, newLine)) {
+        textarea.value = textarea.value.substring(0, lineStart) + newLine + textarea.value.substring(origEnd);
+        textarea.selectionStart = textarea.selectionEnd = lineStart + newLine.length;
+    }
 }
 
 function getNextProjectNumber(text) {
