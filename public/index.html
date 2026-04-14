@@ -345,26 +345,39 @@ function handleKeyEvents(e) {
     }
 }
 
-function insertAtCursor(textarea, text) {
-    textarea.focus();
-    // execCommand는 네이티브 입력처럼 동작하여 스크롤이 커서를 따라감
-    if (!document.execCommand('insertText', false, text)) {
-        // fallback
-        const s = textarea.selectionStart;
-        textarea.value = textarea.value.substring(0, s) + text + textarea.value.substring(textarea.selectionEnd);
-        textarea.selectionStart = textarea.selectionEnd = s + text.length;
+function scrollCaretIntoView(textarea) {
+    const style = window.getComputedStyle(textarea);
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+    const paddingTop = parseFloat(style.paddingTop) || 0;
+    const paddingBottom = parseFloat(style.paddingBottom) || 0;
+
+    const cursorPos = textarea.selectionStart;
+    const linesBefore = textarea.value.substring(0, cursorPos).split('\n').length;
+    const cursorTop = (linesBefore - 1) * lineHeight + paddingTop;
+
+    const viewTop = textarea.scrollTop;
+    const viewBottom = viewTop + textarea.clientHeight - paddingTop - paddingBottom;
+
+    if (cursorTop < viewTop) {
+        textarea.scrollTop = cursorTop;
+    } else if (cursorTop + lineHeight > viewBottom) {
+        textarea.scrollTop = cursorTop + lineHeight - (textarea.clientHeight - paddingTop - paddingBottom);
     }
+}
+
+function insertAtCursor(textarea, text) {
+    const s = textarea.selectionStart;
+    textarea.value = textarea.value.substring(0, s) + text + textarea.value.substring(textarea.selectionEnd);
+    textarea.selectionStart = textarea.selectionEnd = s + text.length;
+    scrollCaretIntoView(textarea);
 }
 
 function replaceCurrentLine(textarea, start, currentLine, newLine) {
     const lineStart = start - currentLine.length;
     const origEnd = textarea.selectionEnd;
-    textarea.focus();
-    textarea.setSelectionRange(lineStart, origEnd);
-    if (!document.execCommand('insertText', false, newLine)) {
-        textarea.value = textarea.value.substring(0, lineStart) + newLine + textarea.value.substring(origEnd);
-        textarea.selectionStart = textarea.selectionEnd = lineStart + newLine.length;
-    }
+    textarea.value = textarea.value.substring(0, lineStart) + newLine + textarea.value.substring(origEnd);
+    textarea.selectionStart = textarea.selectionEnd = lineStart + newLine.length;
+    scrollCaretIntoView(textarea);
 }
 
 function getNextProjectNumber(text) {
