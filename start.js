@@ -25,7 +25,14 @@ const check = setInterval(() => {
         if (res.statusCode === 200) {
             clearInterval(check);
             console.log(`브라우저 열기: ${URL}`);
-            exec(`start chrome "${URL}"`);
+            const startCommand = process.platform === 'win32' ? 'start ""' :
+                               process.platform === 'darwin' ? 'open' :
+                               'xdg-open';
+            exec(`${startCommand} "${URL}"`, (err) => {
+                if (err) {
+                    console.error(`브라우저 실행 실패: ${err.message}`);
+                }
+            });
         }
     }).on('error', () => {
         if (attempts >= maxAttempts) {
