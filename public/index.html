@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>업무 보고 HTML 생성기 (v11)</title>
+    <title>업무 보고 HTML 생성기 (v12)</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232c3e50'/%3E%3Crect x='14' y='10' width='32' height='40' rx='3' fill='%23ffffff'/%3E%3Cpath d='M46 10v10h10z' fill='%23dfe6ec'/%3E%3Crect x='19' y='26' width='22' height='2.5' rx='1' fill='%233498db'/%3E%3Crect x='19' y='32' width='22' height='2.5' rx='1' fill='%2327ae60'/%3E%3Crect x='19' y='38' width='16' height='2.5' rx='1' fill='%23e74c3c'/%3E%3C/svg%3E">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -58,10 +58,11 @@
 <body>
 
 <div class="container">
-    <h1>업무 보고 HTML 생성기 (v11)</h1>
+    <h1>업무 보고 HTML 생성기 (v12)</h1>
     <div class="guide">
         <strong>⚡ 스마트 변환</strong> · 붙여넣기 시 기호 자동 정리<br>
         • <span class="hl">※</span> → 불렛 없이 <span class="hl">[강조]</span> 텍스트 (2뎁스) · <span class="hl">•</span> <span class="hl">*</span> → 2뎁스 · <span class="hl">-</span> → 1뎁스 (들여쓰기 깊이로 3뎁스 자동 판별)<br>
+        • <span class="hl">#&nbsp;텍스트</span> → 이슈 헤더 박스 · <span class="hl">---</span> → 항목 사이 구분선<br>
         • <span class="hl">HTML</span> 코드 붙여넣기 → 불렛 텍스트로 역변환<br>
         <strong>⌨️ 단축키</strong> · <span class="hl">Enter</span> 동일 뎁스 자동 / <span class="hl">Tab</span> 하위 뎁스 / <span class="hl">Ctrl+Z·Y</span> Undo·Redo (최대 100단계)<br>
         <strong>💾 데이터</strong> · 자동 저장(localStorage) · JSON 파일 저장·불러오기(모달 미리보기) · 보고 기준(년/월/주차) 자동 설정<br>
@@ -196,7 +197,8 @@ function htmlToBulletText(htmlStr) {
     wrapper.querySelectorAll('div > div > span:first-child').forEach(titleSpan => {
         const style = titleSpan.getAttribute('style') || '';
         if (!/font-size:\s*17px/.test(style)) return; // 제목 span만
-        const parentWrap = titleSpan.closest('div').parentElement; // outer project div
+        const titleWrap = titleSpan.closest('div');
+        const parentWrap = titleWrap.parentElement; // outer project div
         if (visited.has(parentWrap)) return;
         visited.add(parentWrap);
 
@@ -208,8 +210,18 @@ function htmlToBulletText(htmlStr) {
         }
         out.push(title);
 
-        const ul = parentWrap.querySelector(':scope > ul');
-        if (ul) parseUl(ul, out);
+        Array.from(parentWrap.children).forEach(child => {
+            if (child === titleWrap) return;
+            const tag = child.tagName;
+            if (tag === 'UL') {
+                parseUl(child, out);
+            } else if (tag === 'HR') {
+                out.push('---');
+            } else if (tag === 'DIV') {
+                const inner = child.textContent.trim();
+                if (inner) out.push('# ' + inner);
+            }
+        });
     });
 
     // 제목 없는 ul (차주/기타) 처리: 아직 visited 되지 않은 최상위 ul
@@ -251,6 +263,9 @@ function handlePaste(e) {
     const processedLines = lines.map(line => {
         let content = line.trim();
         if (!content) return "";
+
+        if (/^#\s+/.test(content)) return content;
+        if (/^-{3,}$/.test(content)) return content;
 
         // 1. 프로젝트 제목 (숫자.)
         if (/^\d+\./.test(content)) return content;
@@ -331,6 +346,7 @@ function handleKeyEvents(e) {
         else {
             let ins = "\n";
             if (/^\d+\./.test(trimmed)) ins = "\n- ";
+            else if (/^#\s+/.test(trimmed)) ins = "\n- ";
             else if (trimmed.startsWith('-')) ins = "\n- ";
             else if (trimmed.startsWith('*')) ins = "\n  * ";
             else if (trimmed.startsWith('+')) ins = "\n    + ";
@@ -435,28 +451,51 @@ function parseSection(text, doubleEscape) {
             title = '';
         }
 
-        let list = '';
-        for(let i=startIdx; i<lines.length; i++) {
-            let ln = esc(lines[i].trim());
-            if(!ln || ["-", "*", "+"].includes(ln)) continue;
+        let body = '';
+        let listBuf = '';
+        const flushList = () => {
+            if (listBuf) {
+                body += `<ul style="margin:0;padding-left:20px;font-size:14px;color:#444;">${listBuf}</ul>`;
+                listBuf = '';
+            }
+        };
 
+        for(let i=startIdx; i<lines.length; i++) {
+            const raw = lines[i].trim();
+            if(!raw || ["-", "*", "+"].includes(raw)) continue;
+
+            if (/^#\s+/.test(raw)) {
+                flushList();
+                const head = esc(raw.replace(/^#\s+/, ''));
+                body += `<div style="margin:14px 0 8px;padding:8px 12px;background:#f4f6f8;border-left:3px solid #2c3e50;font-weight:bold;color:#2c3e50;font-size:14px;border-radius:3px;">${head}</div>`;
+                continue;
+            }
+
+            if (/^-{3,}$/.test(raw)) {
+                flushList();
+                body += `<hr style="border:none;border-top:1px dashed #ccc;margin:12px 0;">`;
+                continue;
+            }
+
+            let ln = esc(raw);
             ln = ln.replace(/\[(.*?)\]/g, '<span style="color:#d35400;font-weight:bold;">[$1]</span>');
 
             if (ln.startsWith('+')) {
-                list += `<li style="margin-left:40px;list-style-type:square;font-size:12px;color:#888;margin-top:2px;">${ln.replace(/^\+/,'').trim()}</li>`;
+                listBuf += `<li style="margin-left:40px;list-style-type:square;font-size:12px;color:#888;margin-top:2px;">${ln.replace(/^\+/,'').trim()}</li>`;
             } else if (ln.startsWith('*')) {
-                list += `<li style="margin-left:20px;list-style-type:circle;font-size:13px;color:#666;margin-top:3px;">${ln.replace(/^\*/,'').trim()}</li>`;
+                listBuf += `<li style="margin-left:20px;list-style-type:circle;font-size:13px;color:#666;margin-top:3px;">${ln.replace(/^\*/,'').trim()}</li>`;
             } else if (ln.startsWith('-')) {
-                list += `<li style="margin-top:6px;list-style-type:disc;">${ln.replace(/^-/,'').trim()}</li>`;
+                listBuf += `<li style="margin-top:6px;list-style-type:disc;">${ln.replace(/^-/,'').trim()}</li>`;
             } else {
-                list += `<li style="margin-top:6px;list-style-type:none;margin-left:0px;">${ln}</li>`;
+                listBuf += `<li style="margin-top:6px;list-style-type:none;margin-left:0px;">${ln}</li>`;
             }
         }
+        flushList();
 
         if (title) {
-            html += `<div style="margin-bottom:25px;"><div style="margin-bottom:8px;"><span style="color:#2c3e50;font-size:17px;font-weight:bold;">${title}</span>${tech}</div><ul style="margin:0;padding-left:20px;font-size:14px;color:#444;">${list}</ul></div>`;
+            html += `<div style="margin-bottom:25px;"><div style="margin-bottom:8px;"><span style="color:#2c3e50;font-size:17px;font-weight:bold;">${title}</span>${tech}</div>${body}</div>`;
         } else {
-            html += `<ul style="margin:0;padding-left:20px;font-size:14px;color:#444;">${list}</ul>`;
+            html += body;
         }
     });
     return html;
