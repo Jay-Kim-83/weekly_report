@@ -424,10 +424,12 @@ function escapeHtml(str) {
     return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function escapeHtmlDouble(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&amp;lt;').replace(/>/g,'&amp;gt;').replace(/"/g,'&amp;quot;');
+}
+
 function parseSection(text, doubleEscape) {
-    const esc = doubleEscape
-        ? (s) => escapeHtml(escapeHtml(s))
-        : escapeHtml;
+    const esc = doubleEscape ? escapeHtmlDouble : escapeHtml;
     let html = '';
     const projects = text.split(/\n(?=\d+\.)/);
 
