@@ -413,7 +413,7 @@ function handleInput(skipHistory) {
         saveHistory('inputNext');
         saveHistory('inputETC');
     }
-    localStorage.setItem('work_report_v8', JSON.stringify({
+    localStorage.setItem('work_report', JSON.stringify({
         weekly: document.getElementById('inputWeekly').value,
         next: document.getElementById('inputNext').value,
         etc: document.getElementById('inputETC').value
@@ -653,7 +653,7 @@ function closeModal() {
     pendingLoadData = null;
 }
 
-function resetAll() { if(confirm("초기화하시겠습니까?")) { localStorage.removeItem('work_report_v8'); location.reload(); } }
+function resetAll() { if(confirm("초기화하시겠습니까?")) { localStorage.removeItem('work_report'); location.reload(); } }
 function copyCode() {
     generateHTML();
     const html = document.getElementById('outputCode').value;
@@ -672,7 +672,7 @@ function copyCode() {
 
 window.onload = () => {
     initPeriodSelects();
-    const temp = localStorage.getItem('work_report_v8');
+    const temp = localStorage.getItem('work_report');
     if (temp) {
         const d = JSON.parse(temp);
         document.getElementById('inputWeekly').value = d.weekly;
